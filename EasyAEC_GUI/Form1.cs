@@ -6,6 +6,7 @@ namespace EasyAEC_GUI;
 public partial class Form1 : Form
 {
     private bool _engineRunning;
+    private AudioEngine? _audioEngine;
 
     private sealed class WasapiDeviceItem
     {
@@ -19,8 +20,29 @@ public partial class Form1 : Form
     {
         InitializeComponent();
         LogWriter.Attach(this, chkDebugMode, txtDebugLog);
+        FormClosing += Form1_FormClosing;
         Load += Form1_Load;
         InitializeUiDefaults();
+    }
+
+    private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+    {
+        FormClosing -= Form1_FormClosing;
+        if (!_engineRunning && _audioEngine is null)
+            return;
+        StopAudioEngineInternal();
+        try
+        {
+            AecWrapper.AEC_Destroy();
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (BadImageFormatException)
+        {
+        }
+
+        _engineRunning = false;
     }
 
     private void Form1_Load(object? sender, EventArgs e)
@@ -38,7 +60,7 @@ public partial class Form1 : Form
         cboSuppressionStrength.Items.AddRange(new object[] { "柔和", "标准", "强力" });
         cboSuppressionStrength.SelectedIndex = 1;
 
-        LogWriter.LogInfo("UI", "EasyAEC UI 已加载。窗体加载完成后将枚举 WASAPI 设备；电平表待接入音频引擎后驱动。");
+        LogWriter.LogInfo("UI", "EasyAEC UI 已加载。窗体加载完成后将枚举 WASAPI 设备；开始运行后由 AudioEngine 驱动电平表。");
         SetBriefStatus("就绪");
     }
 
@@ -126,6 +148,9 @@ public partial class Form1 : Form
         return string.IsNullOrWhiteSpace(box.Text) ? "（未选择）" : box.Text.Trim();
     }
 
+    private static string? GetSelectedDeviceId(ComboBox box) =>
+        box.SelectedItem is WasapiDeviceItem w ? w.Id : null;
+
     private void BtnStartRun_Click(object? sender, EventArgs e)
     {
         if (_engineRunning)
@@ -186,14 +211,68 @@ public partial class Form1 : Form
             $"压制强度: {cboSuppressionStrength.Text}; " +
             $"延迟补偿: {delayMs.ToString(CultureInfo.InvariantCulture)} ms");
 
+        var idMic = GetSelectedDeviceId(cboListenInput);
+        var idLoop = GetSelectedDeviceId(cboListenOutput);
+        var idPlay = GetSelectedDeviceId(cboAudioOutput);
+        if (string.IsNullOrWhiteSpace(idMic) || string.IsNullOrWhiteSpace(idLoop) || string.IsNullOrWhiteSpace(idPlay))
+        {
+            LogWriter.LogWarning("Runtime", "请先刷新并选择有效的音频设备。");
+            MessageBox.Show(this, "请先刷新设备列表，并为三个下拉框各选一个设备。", "设备", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        AudioEngine? engine = null;
+        try
+        {
+            engine = new AudioEngine();
+            engine.LevelsUpdated += AudioEngine_OnLevelsUpdated;
+            engine.Start(idMic, idLoop, idPlay, delayMs);
+            _audioEngine = engine;
+            engine = null;
+        }
+        catch (Exception ex)
+        {
+            if (engine is not null)
+            {
+                engine.LevelsUpdated -= AudioEngine_OnLevelsUpdated;
+                try
+                {
+                    engine.Dispose();
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+
+            LogWriter.LogError("AudioEngine", $"启动失败：{ex.Message}");
+            MessageBox.Show(this, $"音频引擎启动失败：{ex.Message}", "AudioEngine", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
         _engineRunning = true;
         btnStartRun.Enabled = false;
         btnStopRun.Enabled = true;
-        SetBriefStatus("运行中（UI 模拟，未接音频）");
+        SetBriefStatus("运行中（WASAPI 实时）");
 
         pbrMeterInput.Value = 0;
         pbrMeterReference.Value = 0;
         pbrMeterOutput.Value = 0;
+    }
+
+    private void AudioEngine_OnLevelsUpdated(object? sender, AudioLevelsEventArgs e)
+    {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+        if (InvokeRequired)
+        {
+            BeginInvoke(() => AudioEngine_OnLevelsUpdated(sender, e));
+            return;
+        }
+
+        pbrMeterInput.Value = e.NearPeak;
+        pbrMeterReference.Value = e.FarPeak;
+        pbrMeterOutput.Value = e.OutputPeak;
     }
 
     private void BtnStopRun_Click(object? sender, EventArgs e)
@@ -205,6 +284,8 @@ public partial class Form1 : Form
         }
 
         LogWriter.LogInfo("Runtime", "已停止运行。");
+        StopAudioEngineInternal();
+
         try
         {
             AecWrapper.AEC_Destroy();
@@ -225,6 +306,32 @@ public partial class Form1 : Form
         pbrMeterInput.Value = 0;
         pbrMeterReference.Value = 0;
         pbrMeterOutput.Value = 0;
+    }
+
+    private void StopAudioEngineInternal()
+    {
+        var eng = _audioEngine;
+        _audioEngine = null;
+        if (eng is null)
+            return;
+        eng.LevelsUpdated -= AudioEngine_OnLevelsUpdated;
+        try
+        {
+            eng.Stop();
+        }
+        catch
+        {
+            /* ignore */
+        }
+
+        try
+        {
+            eng.Dispose();
+        }
+        catch
+        {
+            /* ignore */
+        }
     }
 
     private static bool TryParseDelayMs(string text, out int delayMs, out string error)
