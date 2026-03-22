@@ -10,10 +10,11 @@ extern "C" {
 #define AEC_API __declspec(dllimport)
 #endif
 
-/// <returns>非零表示初始化成功（Mock 恒为 1）</returns>
+/// <summary>初始化 WebRTC AEC3（48kHz / 单声道 / 10ms=480 点）。</summary>
+/// <returns>非零成功</returns>
 AEC_API int AEC_Init(int sampleRate, int suppressionLevel);
 
-/// <summary>处理一帧音频；Mock 将 nearEndMic 拷贝到 outClean。</summary>
+/// <summary>处理一帧：nearEndMic=麦克风，farEndRef=远端/回路参考；输出写入 outClean。</summary>
 AEC_API void AEC_ProcessFrame(
     float* nearEndMic,
     float* farEndRef,

@@ -40,11 +40,31 @@ if ([string]::IsNullOrWhiteSpace($msbExe)) {
     exit 0
 }
 
+$aec3Sln = Join-Path $root "third_party\AEC3\AEC3.sln"
+if (Test-Path -LiteralPath $aec3Sln) {
+    Write-Host "[AEC_Core] Building third_party/AEC3 (AEC3.lib, api.lib, base.lib) ..."
+    & $msbExe $aec3Sln `
+        "/p:Configuration=$Configuration" `
+        "/p:Platform=x64" `
+        "/p:WindowsTargetPlatformVersion=10.0" `
+        "/p:PlatformToolset=v143" `
+        "/v:minimal" `
+        "/nologo" `
+        "/m"
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+else {
+    Write-Warning "[AEC_Core] Missing $aec3Sln — run: git clone https://github.com/ewan-xu/AEC3.git third_party/AEC3"
+}
+
 $proj = Join-Path $root "AEC_Core\AEC_Core.vcxproj"
 if (-not (Test-Path -LiteralPath $proj)) {
     Write-Error "[AEC_Core] Project not found: $proj"
     exit 1
 }
 
+Write-Host "[AEC_Core] Building AEC_Core.dll ..."
 & $msbExe $proj "/p:Configuration=$Configuration" "/p:Platform=x64" "/v:minimal" "/nologo"
 exit $LASTEXITCODE
