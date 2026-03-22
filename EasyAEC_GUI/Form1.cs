@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Text;
+using NAudio.CoreAudioApi;
 
 namespace EasyAEC_GUI;
 
@@ -7,9 +7,18 @@ public partial class Form1 : Form
 {
     private bool _engineRunning;
 
+    private sealed class WasapiDeviceItem
+    {
+        public required string Id { get; init; }
+        public required string DisplayName { get; init; }
+
+        public override string ToString() => DisplayName;
+    }
+
     public Form1()
     {
         InitializeComponent();
+        LogWriter.Attach(this, chkDebugMode, txtDebugLog);
         Load += Form1_Load;
         InitializeUiDefaults();
     }
@@ -17,11 +26,11 @@ public partial class Form1 : Form
     private void Form1_Load(object? sender, EventArgs e)
     {
         Load -= Form1_Load;
-        PopulatePlaceholderDevices(log: false);
+        RefreshAudioDevices(log: false);
     }
 
     /// <summary>
-    /// 填充压制强度、占位设备项，并写一条启动日志（尚未连接真实 WASAPI）。
+    /// 填充压制强度等默认值。
     /// </summary>
     private void InitializeUiDefaults()
     {
@@ -29,28 +38,8 @@ public partial class Form1 : Form
         cboSuppressionStrength.Items.AddRange(new object[] { "柔和", "标准", "强力" });
         cboSuppressionStrength.SelectedIndex = 1;
 
-        AppendLog("EasyAEC UI 已加载。当前为界面原型：设备列表为占位数据，电平表待接入音频引擎后驱动。");
+        LogWriter.LogInfo("UI", "EasyAEC UI 已加载。窗体加载完成后将枚举 WASAPI 设备；电平表待接入音频引擎后驱动。");
         SetBriefStatus("就绪");
-    }
-
-    /// <summary>
-    /// 向底部多行日志区追加一行带时间戳的文本，并滚动到底部。
-    /// </summary>
-    public void AppendLog(string message)
-    {
-        if (IsDisposed || !IsHandleCreated)
-            return;
-
-        var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}";
-        if (InvokeRequired)
-        {
-            BeginInvoke(() => AppendLog(message));
-            return;
-        }
-
-        txtDebugLog.AppendText(line);
-        txtDebugLog.SelectionStart = txtDebugLog.TextLength;
-        txtDebugLog.ScrollToCaret();
     }
 
     private void SetBriefStatus(string text)
@@ -66,76 +55,105 @@ public partial class Form1 : Form
 
     private void BtnRefreshDevices_Click(object? sender, EventArgs e)
     {
-        PopulatePlaceholderDevices(log: true);
+        RefreshAudioDevices(log: true);
     }
 
     /// <summary>
-    /// 占位设备列表；接入 NAudio 后改为枚举 WASAPI 设备。
+    /// 使用 NAudio MMDeviceEnumerator 枚举当前系统中活动的 WASAPI 设备。
     /// </summary>
-    private void PopulatePlaceholderDevices(bool log)
+    private void RefreshAudioDevices(bool log)
     {
-        const string placeholder = "（占位）尚未枚举设备 — 将使用 NAudio";
-
-        static void Fill(ComboBox box, string role, string ph)
+        try
         {
-            box.BeginUpdate();
-            try
+            var captureItems = EnumerateDevices(DataFlow.Capture);
+            var renderItems = EnumerateDevices(DataFlow.Render);
+
+            FillComboWithDevices(cboListenInput, captureItems);
+            FillComboWithDevices(cboListenOutput, renderItems);
+            FillComboWithDevices(cboAudioOutput, renderItems);
+
+            if (log)
             {
-                box.Items.Clear();
-                box.Items.Add($"{role} — 默认设备 {ph}");
-                box.Items.Add($"{role} — 虚拟线路 1 {ph}");
-                box.Items.Add($"{role} — 虚拟线路 2 {ph}");
+                LogWriter.LogInfo("Audio",
+                    $"已刷新设备列表：Capture {captureItems.Count} 个，Render {renderItems.Count} 个。");
+                SetBriefStatus("设备列表已更新");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogWriter.LogError("Audio", $"枚举音频设备失败：{ex.Message}");
+            SetBriefStatus("设备枚举失败");
+        }
+    }
+
+    private static List<WasapiDeviceItem> EnumerateDevices(DataFlow dataFlow)
+    {
+        var list = new List<WasapiDeviceItem>();
+        using var enumerator = new MMDeviceEnumerator();
+        foreach (var dev in enumerator.EnumerateAudioEndPoints(dataFlow, DeviceState.Active))
+        {
+            using (dev)
+            {
+                list.Add(new WasapiDeviceItem { Id = dev.ID, DisplayName = dev.FriendlyName });
+            }
+        }
+
+        return list;
+    }
+
+    private static void FillComboWithDevices(ComboBox box, IReadOnlyList<WasapiDeviceItem> items)
+    {
+        box.BeginUpdate();
+        try
+        {
+            box.Items.Clear();
+            foreach (var it in items)
+                box.Items.Add(it);
+
+            if (box.Items.Count > 0)
                 box.SelectedIndex = 0;
-            }
-            finally
-            {
-                box.EndUpdate();
-            }
         }
-
-        Fill(cboListenInput, "监听输入", placeholder);
-        Fill(cboListenOutput, "监听输出", placeholder);
-        Fill(cboAudioOutput, "音频输出", placeholder);
-
-        if (log)
+        finally
         {
-            AppendLog("已刷新设备列表（占位数据）。接入 NAudio 后将显示真实设备名称与 ID。");
-            SetBriefStatus("设备列表已更新（占位）");
+            box.EndUpdate();
         }
+    }
+
+    private static string GetSelectedDeviceDisplayName(ComboBox box)
+    {
+        if (box.SelectedItem is WasapiDeviceItem w)
+            return w.DisplayName;
+        return string.IsNullOrWhiteSpace(box.Text) ? "（未选择）" : box.Text.Trim();
     }
 
     private void BtnStartRun_Click(object? sender, EventArgs e)
     {
         if (_engineRunning)
         {
-            AppendLog("引擎已在运行中。");
+            LogWriter.LogWarning("Runtime", "引擎已在运行中。");
             return;
         }
 
         if (!TryParseDelayMs(txtDelayCompensationMs.Text, out var delayMs, out var parseError))
         {
-            AppendLog($"延迟补偿无效：{parseError}");
+            LogWriter.LogWarning("Runtime", $"延迟补偿无效：{parseError}");
             SetBriefStatus("延迟补偿格式错误");
             MessageBox.Show(this, parseError, "延迟补偿", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        var sb = new StringBuilder();
-        sb.Append("开始运行 — ");
-        sb.Append($"监听输入: {cboListenInput.Text}; ");
-        sb.Append($"监听输出: {cboListenOutput.Text}; ");
-        sb.Append($"音频输出: {cboAudioOutput.Text}; ");
-        sb.Append($"压制强度: {cboSuppressionStrength.Text}; ");
-        sb.Append($"延迟补偿: {delayMs.ToString(CultureInfo.InvariantCulture)} ms; ");
-        sb.Append($"Debug: {(chkDebugMode.Checked ? "开" : "关")}");
-        AppendLog(sb.ToString());
+        LogWriter.LogInfo("Runtime",
+            $"监听输入: {GetSelectedDeviceDisplayName(cboListenInput)}; " +
+            $"监听输出: {GetSelectedDeviceDisplayName(cboListenOutput)}; " +
+            $"音频输出: {GetSelectedDeviceDisplayName(cboAudioOutput)}; " +
+            $"压制强度: {cboSuppressionStrength.Text}; " +
+            $"延迟补偿: {delayMs.ToString(CultureInfo.InvariantCulture)} ms");
 
         _engineRunning = true;
         btnStartRun.Enabled = false;
         btnStopRun.Enabled = true;
         SetBriefStatus("运行中（UI 模拟，未接音频）");
 
-        // 电平表占位：清零；接入引擎后在此处更新 Value
         pbrMeterInput.Value = 0;
         pbrMeterReference.Value = 0;
         pbrMeterOutput.Value = 0;
@@ -145,11 +163,11 @@ public partial class Form1 : Form
     {
         if (!_engineRunning)
         {
-            AppendLog("当前未在运行。");
+            LogWriter.LogInfo("Runtime", "当前未在运行。");
             return;
         }
 
-        AppendLog("已停止运行。");
+        LogWriter.LogInfo("Runtime", "已停止运行。");
         _engineRunning = false;
         btnStartRun.Enabled = true;
         btnStopRun.Enabled = false;
