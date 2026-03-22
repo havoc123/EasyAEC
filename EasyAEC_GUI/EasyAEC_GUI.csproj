@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -6,10 +6,35 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- 与 AEC_Core.dll（x64）一致；避免 AnyCPU + x86 与 NAudio/x64 混用 -->
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <!-- 使用 VS「Debug|x64 / Release|x64」时仍输出到 bin\Configuration\net8.0-windows\，与 C++ OutDir 对齐 -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.3.0" />
   </ItemGroup>
+
+  <!-- 仅用 dotnet build/run GUI 时也会尝试编译 AEC_Core（需本机已安装 VS + C++ 工作负载）；否则请用 EasyAEC.sln 在 VS 中生成 -->
+  <Target Name="BuildAecCoreDll" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PropertyGroup>
+      <_BuildAecScript>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\build-aec-core.ps1'))</_BuildAecScript>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(_BuildAecScript)&quot; -Configuration &quot;$(Configuration)&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory).."
+          IgnoreStandardErrorWarningFormat="true" />
+  </Target>
+
+  <Target Name="VerifyAecCoreDllPresent" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PropertyGroup>
+      <_AecDll>$(TargetDir)AEC_Core.dll</_AecDll>
+    </PropertyGroup>
+    <Warning Condition="!Exists('$(_AecDll)')"
+             Code="EASYAEC001"
+             Text="未在输出目录找到 AEC_Core.dll：$(_AecDll)。请安装 Visual Studio（工作负载：使用 C++ 的桌面开发）后重新生成，或在 Visual Studio 中打开 EasyAEC.sln 并生成解决方案（配置 x64）。" />
+  </Target>
 
 </Project>

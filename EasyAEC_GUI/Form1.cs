@@ -142,6 +142,43 @@ public partial class Form1 : Form
             return;
         }
 
+        var suppressionLevel = Math.Clamp(cboSuppressionStrength.SelectedIndex, 0, 2);
+        const int sampleRate = 48000;
+        try
+        {
+            if (AecWrapper.AEC_Init(sampleRate, suppressionLevel) == 0)
+            {
+                LogWriter.LogError("AEC_Core", "AEC_Init 返回失败。");
+                SetBriefStatus("AEC 初始化失败");
+                MessageBox.Show(this, "AEC_Init 返回失败。", "AEC_Core", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            LogWriter.LogInfo("AEC_Core", "DLL 初始化成功！");
+        }
+        catch (DllNotFoundException ex)
+        {
+            LogWriter.LogError("AEC_Core", $"找不到 AEC_Core.dll：{ex.Message}");
+            SetBriefStatus("缺少 AEC_Core.dll");
+            MessageBox.Show(this,
+                "未找到 AEC_Core.dll。请先编译 C++ 项目 AEC_Core（x64），并确认 DLL 与 exe 在同一输出目录。",
+                "AEC_Core",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+        catch (BadImageFormatException ex)
+        {
+            LogWriter.LogError("AEC_Core", $"DLL 与进程架构不匹配（需 64 位）：{ex.Message}");
+            SetBriefStatus("DLL 架构错误");
+            MessageBox.Show(this,
+                "AEC_Core.dll 与当前进程位数不一致。请将 C# 与 C++ 均设为 x64 后重新生成。",
+                "AEC_Core",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
         LogWriter.LogInfo("Runtime",
             $"监听输入: {GetSelectedDeviceDisplayName(cboListenInput)}; " +
             $"监听输出: {GetSelectedDeviceDisplayName(cboListenOutput)}; " +
@@ -168,6 +205,18 @@ public partial class Form1 : Form
         }
 
         LogWriter.LogInfo("Runtime", "已停止运行。");
+        try
+        {
+            AecWrapper.AEC_Destroy();
+        }
+        catch (DllNotFoundException)
+        {
+            // DLL 缺失时忽略清理
+        }
+        catch (BadImageFormatException)
+        {
+        }
+
         _engineRunning = false;
         btnStartRun.Enabled = true;
         btnStopRun.Enabled = false;
