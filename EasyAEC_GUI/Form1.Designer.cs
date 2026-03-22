@@ -98,7 +98,7 @@ partial class Form1
         tableDevices.Controls.Add(panelMeterOut, 2, 2);
         tableDevices.Dock = DockStyle.Top;
         tableDevices.Location = new Point(28, 51);
-        tableDevices.Margin = new Padding(6, 6, 6, 6);
+        tableDevices.Margin = new Padding(6);
         tableDevices.Name = "tableDevices";
         tableDevices.RowCount = 3;
         tableDevices.RowStyles.Add(new RowStyle(SizeType.Absolute, 56F));
@@ -205,7 +205,7 @@ partial class Form1
         // 
         pbrMeterInput.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         pbrMeterInput.Location = new Point(0, 44);
-        pbrMeterInput.Margin = new Padding(6, 6, 6, 6);
+        pbrMeterInput.Margin = new Padding(6);
         pbrMeterInput.Name = "pbrMeterInput";
         pbrMeterInput.Size = new Size(520, 36);
         pbrMeterInput.Style = ProgressBarStyle.Continuous;
@@ -236,7 +236,7 @@ partial class Form1
         // 
         pbrMeterReference.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         pbrMeterReference.Location = new Point(0, 44);
-        pbrMeterReference.Margin = new Padding(6, 6, 6, 6);
+        pbrMeterReference.Margin = new Padding(6);
         pbrMeterReference.Name = "pbrMeterReference";
         pbrMeterReference.Size = new Size(520, 36);
         pbrMeterReference.Style = ProgressBarStyle.Continuous;
@@ -267,7 +267,7 @@ partial class Form1
         // 
         pbrMeterOutput.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         pbrMeterOutput.Location = new Point(0, 44);
-        pbrMeterOutput.Margin = new Padding(6, 6, 6, 6);
+        pbrMeterOutput.Margin = new Padding(6);
         pbrMeterOutput.Name = "pbrMeterOutput";
         pbrMeterOutput.Size = new Size(520, 36);
         pbrMeterOutput.Style = ProgressBarStyle.Continuous;
@@ -318,7 +318,7 @@ partial class Form1
         tableCore.Controls.Add(flowButtons, 6, 0);
         tableCore.Dock = DockStyle.Top;
         tableCore.Location = new Point(28, 51);
-        tableCore.Margin = new Padding(6, 6, 6, 6);
+        tableCore.Margin = new Padding(6);
         tableCore.Name = "tableCore";
         tableCore.RowCount = 1;
         tableCore.RowStyles.Add(new RowStyle(SizeType.Absolute, 80F));
@@ -497,7 +497,7 @@ partial class Form1
         Controls.Add(mainLayout);
         Controls.Add(statusStripMain);
         Font = new Font("Microsoft YaHei UI", 9F);
-        Margin = new Padding(6, 6, 6, 6);
+        Margin = new Padding(6);
         MinimumSize = new Size(1774, 969);
         Name = "Form1";
         Padding = new Padding(24, 24, 16, 0);
