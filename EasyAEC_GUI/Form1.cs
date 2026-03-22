@@ -7,7 +7,6 @@ public partial class Form1 : Form
 {
     private bool _engineRunning;
     private AudioEngine? _audioEngine;
-    private string _configFilePath = Path.Combine(AppContext.BaseDirectory, "config.json");
 
     private sealed class WasapiDeviceItem
     {
@@ -29,7 +28,6 @@ public partial class Form1 : Form
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
         FormClosing -= Form1_FormClosing;
-        SaveConfig();
         if (!_engineRunning && _audioEngine is null)
             return;
         StopAudioEngineInternal();
@@ -51,7 +49,6 @@ public partial class Form1 : Form
     {
         Load -= Form1_Load;
         RefreshAudioDevices(log: false);
-        LoadConfig();
     }
 
     /// <summary>
@@ -356,97 +353,5 @@ public partial class Form1 : Form
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// 保存当前配置到 config.json 文件。
-    /// </summary>
-    private void SaveConfig()
-    {
-        try
-        {
-            var config = new AppConfig
-            {
-                InDevice = GetSelectedDeviceDisplayName(cboListenInput),
-                RefDevice = GetSelectedDeviceDisplayName(cboListenOutput),
-                OutDevice = GetSelectedDeviceDisplayName(cboAudioOutput),
-                SuppressionLevel = cboSuppressionStrength.SelectedItem?.ToString() ?? "标准",
-                DelayMs = int.TryParse(txtDelayCompensationMs.Text.Trim(), NumberStyles.Integer, 
-                    CultureInfo.InvariantCulture, out var delay) ? delay : 60,
-                IsDebug = chkDebugMode.Checked
-            };
-
-            config.SaveToFile(_configFilePath);
-            LogWriter.LogInfo("Config", $"配置已保存到 {_configFilePath}");
-        }
-        catch (Exception ex)
-        {
-            LogWriter.LogError("Config", $"保存配置失败：{ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// 从 config.json 文件加载配置。
-    /// 在 Form1_Load 中调用（位于设备列表刷新之后）。
-    /// </summary>
-    private void LoadConfig()
-    {
-        try
-        {
-            var config = AppConfig.LoadFromFile(_configFilePath);
-            if (config == null)
-            {
-                LogWriter.LogInfo("Config", "未找到配置文件，使用默认设置。");
-                return;
-            }
-
-            // 加载设备（验证设备是否存在）
-            LoadDeviceIfExists(cboListenInput, config.InDevice);
-            LoadDeviceIfExists(cboListenOutput, config.RefDevice);
-            LoadDeviceIfExists(cboAudioOutput, config.OutDevice);
-
-            // 加载压制强度
-            if (!string.IsNullOrWhiteSpace(config.SuppressionLevel))
-            {
-                var index = cboSuppressionStrength.Items.IndexOf(config.SuppressionLevel);
-                if (index >= 0)
-                    cboSuppressionStrength.SelectedIndex = index;
-            }
-
-            // 加载延迟补偿
-            txtDelayCompensationMs.Text = config.DelayMs.ToString(CultureInfo.InvariantCulture);
-
-            // 加载 Debug 状态
-            chkDebugMode.Checked = config.IsDebug;
-
-            LogWriter.LogInfo("Config", "配置已从文件加载。");
-        }
-        catch (Exception ex)
-        {
-            LogWriter.LogError("Config", $"加载配置失败：{ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// 尝试在下拉框中选中指定名称的设备。
-    /// 如果设备不存在，则不进行选中。
-    /// </summary>
-    private static void LoadDeviceIfExists(ComboBox comboBox, string deviceDisplayName)
-    {
-        if (string.IsNullOrWhiteSpace(deviceDisplayName) || deviceDisplayName == "（未选择）")
-            return;
-
-        // 遍历下拉框项，寻找匹配的设备显示名称
-        for (int i = 0; i < comboBox.Items.Count; i++)
-        {
-            if (comboBox.Items[i] is WasapiDeviceItem item && item.DisplayName == deviceDisplayName)
-            {
-                comboBox.SelectedIndex = i;
-                return;
-            }
-        }
-
-        // 若未找到，则保持默认选择（第一项）
-        LogWriter.LogWarning("Config", $"未找到设备 '{deviceDisplayName}'，将使用当前列表中的第一个设备。");
     }
 }

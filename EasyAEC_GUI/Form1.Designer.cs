@@ -40,11 +40,11 @@ partial class Form1
         lblSuppression = new Label();
         cboSuppressionStrength = new ComboBox();
         lblDelayMs = new Label();
-        txtDelayCompensationMs = new TextBox();
         chkDebugMode = new CheckBox();
         flowButtons = new FlowLayoutPanel();
         btnStartRun = new Button();
         btnStopRun = new Button();
+        txtDelayCompensationMs = new TextBox();
         pnlLogHost = new Panel();
         txtDebugLog = new TextBox();
         statusStripMain = new StatusStrip();
@@ -313,9 +313,9 @@ partial class Form1
         tableCore.Controls.Add(lblSuppression, 0, 0);
         tableCore.Controls.Add(cboSuppressionStrength, 1, 0);
         tableCore.Controls.Add(lblDelayMs, 2, 0);
-        tableCore.Controls.Add(txtDelayCompensationMs, 3, 0);
         tableCore.Controls.Add(chkDebugMode, 4, 0);
         tableCore.Controls.Add(flowButtons, 6, 0);
+        tableCore.Controls.Add(txtDelayCompensationMs, 3, 0);
         tableCore.Dock = DockStyle.Top;
         tableCore.Location = new Point(28, 51);
         tableCore.Margin = new Padding(6);
@@ -359,18 +359,6 @@ partial class Form1
         lblDelayMs.TabIndex = 2;
         lblDelayMs.Text = "延迟补偿(ms)";
         lblDelayMs.TextAlign = ContentAlignment.MiddleLeft;
-        // 
-        // txtDelayCompensationMs
-        // 
-        txtDelayCompensationMs.Anchor = AnchorStyles.Left;
-        txtDelayCompensationMs.Location = new Point(658, 27);
-        txtDelayCompensationMs.Margin = new Padding(6, 18, 16, 6);
-        txtDelayCompensationMs.MaxLength = 6;
-        txtDelayCompensationMs.Name = "txtDelayCompensationMs";
-        txtDelayCompensationMs.Size = new Size(110, 38);
-        txtDelayCompensationMs.TabIndex = 3;
-        txtDelayCompensationMs.Text = "0";
-        txtDelayCompensationMs.TextAlign = HorizontalAlignment.Right;
         // 
         // chkDebugMode
         // 
@@ -426,6 +414,18 @@ partial class Form1
         btnStopRun.Text = "停止运行";
         btnStopRun.UseVisualStyleBackColor = true;
         btnStopRun.Click += BtnStopRun_Click;
+        // 
+        // txtDelayCompensationMs
+        // 
+        txtDelayCompensationMs.Anchor = AnchorStyles.Left;
+        txtDelayCompensationMs.Location = new Point(658, 27);
+        txtDelayCompensationMs.Margin = new Padding(6, 18, 16, 6);
+        txtDelayCompensationMs.MaxLength = 6;
+        txtDelayCompensationMs.Name = "txtDelayCompensationMs";
+        txtDelayCompensationMs.Size = new Size(110, 38);
+        txtDelayCompensationMs.TabIndex = 3;
+        txtDelayCompensationMs.Text = "0";
+        txtDelayCompensationMs.TextAlign = HorizontalAlignment.Right;
         // 
         // pnlLogHost
         // 
