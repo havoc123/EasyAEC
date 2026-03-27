@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
   </ItemGroup>
 
   <!-- 仅用 dotnet build/run GUI 时也会尝试编译 AEC_Core（需本机已安装 VS + C++ 工作负载）；否则请用 EasyAEC.sln 在 VS 中生成 -->

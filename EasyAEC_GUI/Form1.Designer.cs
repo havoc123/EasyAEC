@@ -44,6 +44,7 @@ partial class Form1
         flowButtons = new FlowLayoutPanel();
         btnStartRun = new Button();
         btnStopRun = new Button();
+        btnAutoCalibrate = new Button();
         txtDelayCompensationMs = new TextBox();
         pnlLogHost = new Panel();
         txtDebugLog = new TextBox();
@@ -379,23 +380,25 @@ partial class Form1
         tableCore.SetColumnSpan(flowButtons, 2);
         flowButtons.Controls.Add(btnStartRun);
         flowButtons.Controls.Add(btnStopRun);
+        flowButtons.Controls.Add(btnAutoCalibrate);
         flowButtons.Dock = DockStyle.Fill;
         flowButtons.Location = new Point(1291, 0);
         flowButtons.Margin = new Padding(0);
         flowButtons.Name = "flowButtons";
         flowButtons.Padding = new Padding(0, 8, 0, 0);
         flowButtons.Size = new Size(613, 80);
+        flowButtons.AutoScroll = true;
         flowButtons.TabIndex = 5;
         flowButtons.WrapContents = false;
         // 
         // btnStartRun
         // 
-        btnStartRun.AutoSize = true;
+        btnStartRun.AutoSize = false;
         btnStartRun.Location = new Point(0, 8);
-        btnStartRun.Margin = new Padding(0, 0, 20, 0);
+        btnStartRun.Margin = new Padding(0, 0, 16, 0);
         btnStartRun.Name = "btnStartRun";
-        btnStartRun.Padding = new Padding(28, 8, 28, 8);
-        btnStartRun.Size = new Size(296, 66);
+        btnStartRun.Padding = new Padding(16, 8, 16, 8);
+        btnStartRun.Size = new Size(190, 60);
         btnStartRun.TabIndex = 0;
         btnStartRun.Text = "开始运行";
         btnStartRun.UseVisualStyleBackColor = true;
@@ -403,17 +406,30 @@ partial class Form1
         // 
         // btnStopRun
         // 
-        btnStopRun.AutoSize = true;
+        btnStopRun.AutoSize = false;
         btnStopRun.Enabled = false;
-        btnStopRun.Location = new Point(316, 8);
-        btnStopRun.Margin = new Padding(0);
+        btnStopRun.Location = new Point(206, 8);
+        btnStopRun.Margin = new Padding(0, 0, 16, 0);
         btnStopRun.Name = "btnStopRun";
-        btnStopRun.Padding = new Padding(28, 8, 28, 8);
-        btnStopRun.Size = new Size(296, 66);
+        btnStopRun.Padding = new Padding(16, 8, 16, 8);
+        btnStopRun.Size = new Size(190, 60);
         btnStopRun.TabIndex = 1;
         btnStopRun.Text = "停止运行";
         btnStopRun.UseVisualStyleBackColor = true;
         btnStopRun.Click += BtnStopRun_Click;
+        // 
+        // btnAutoCalibrate
+        // 
+        btnAutoCalibrate.AutoSize = false;
+        btnAutoCalibrate.Location = new Point(412, 8);
+        btnAutoCalibrate.Margin = new Padding(0);
+        btnAutoCalibrate.Name = "btnAutoCalibrate";
+        btnAutoCalibrate.Padding = new Padding(16, 8, 16, 8);
+        btnAutoCalibrate.Size = new Size(190, 60);
+        btnAutoCalibrate.TabIndex = 2;
+        btnAutoCalibrate.Text = "自动测算延迟";
+        btnAutoCalibrate.UseVisualStyleBackColor = true;
+        btnAutoCalibrate.Click += BtnAutoCalibrate_Click;
         // 
         // txtDelayCompensationMs
         // 
@@ -557,6 +573,7 @@ partial class Form1
     private FlowLayoutPanel flowButtons;
     private Button btnStartRun;
     private Button btnStopRun;
+    private Button btnAutoCalibrate;
     private Panel pnlLogHost;
     private TextBox txtDebugLog;
     private StatusStrip statusStripMain;

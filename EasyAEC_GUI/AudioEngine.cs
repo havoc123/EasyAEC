@@ -39,6 +39,11 @@ public sealed class AudioEngine : IDisposable
     private bool _disposed;
     private DateTime _lastLevelsUtc = DateTime.MinValue;
 
+    private double _calibrationEnergySum;
+    private double _calibrationFarEnergySum;
+    private int _calibrationSampleCount;
+    private readonly List<double> _calibrationFrameRatios = new();
+
     /// <summary>近端 / 参考 / 输出 峰值 0–100（节流后从音频线程触发，由 UI 侧 Invoke）。</summary>
     public event EventHandler<AudioLevelsEventArgs>? LevelsUpdated;
 
@@ -108,41 +113,96 @@ public sealed class AudioEngine : IDisposable
         }
     }
 
+    public void SetDelayCompensationMs(int delayCompensationMs)
+    {
+        lock (_sync)
+        {
+            _delaySamples = Math.Clamp(delayCompensationMs, 0, 500) * (TargetSampleRate / 1000);
+
+            // 延迟变化后清空参考延迟缓冲，避免历史样本污染当前评估。
+            _refHold.Clear();
+            _refDelayed.Clear();
+        }
+    }
+
+    public void ResetCalibrationEnergy()
+    {
+        lock (_sync)
+        {
+            _calibrationEnergySum = 0d;
+            _calibrationFarEnergySum = 0d;
+            _calibrationSampleCount = 0;
+            _calibrationFrameRatios.Clear();
+        }
+    }
+
+    public (double OutRms, double FarRms, double ResidualRatio, int ConvergenceMs) GetCalibrationScore()
+    {
+        lock (_sync)
+        {
+            if (_calibrationSampleCount <= 0)
+                return (double.MaxValue, double.MaxValue, double.MaxValue, int.MaxValue);
+
+            var outMeanSquare = _calibrationEnergySum / _calibrationSampleCount;
+            var farMeanSquare = _calibrationFarEnergySum / _calibrationSampleCount;
+
+            var outRms = Math.Sqrt(Math.Max(0d, outMeanSquare));
+            var farRms = Math.Sqrt(Math.Max(0d, farMeanSquare));
+            var ratio = outRms / Math.Max(1e-8, farRms);
+
+            // 收敛时间：第一次达到 residualRatio <= 0.35 的 10ms 帧索引。
+            const double targetRatio = 0.35;
+            var convergenceFrame = _calibrationFrameRatios.FindIndex(r => r <= targetRatio);
+            var convergenceMs = convergenceFrame >= 0 ? convergenceFrame * 10 : int.MaxValue;
+
+            return (outRms, farRms, ratio, convergenceMs);
+        }
+    }
+
     public void Stop()
     {
+        WasapiCapture? mic;
+        WasapiLoopbackCapture? loop;
+        WasapiOut? outDev;
+
         lock (_sync)
         {
             if (!_running)
                 return;
 
             _running = false;
+            mic = _micCapture;
+            loop = _loopCapture;
+            outDev = _wasapiOut;
+        }
 
-            try
-            {
-                _micCapture?.StopRecording();
-            }
-            catch
-            {
-                /* ignore */
-            }
+        // 注意：不要在持有 _sync 时调用 StopRecording/Stop。
+        // 某些驱动会在停止过程中回调 DataAvailable/RecordingStopped，若回调里再取 _sync 会死锁。
+        try
+        {
+            mic?.StopRecording();
+        }
+        catch
+        {
+            /* ignore */
+        }
 
-            try
-            {
-                _loopCapture?.StopRecording();
-            }
-            catch
-            {
-                /* ignore */
-            }
+        try
+        {
+            loop?.StopRecording();
+        }
+        catch
+        {
+            /* ignore */
+        }
 
-            try
-            {
-                _wasapiOut?.Stop();
-            }
-            catch
-            {
-                /* ignore */
-            }
+        try
+        {
+            outDev?.Stop();
+        }
+        catch
+        {
+            /* ignore */
         }
     }
 
@@ -227,6 +287,28 @@ public sealed class AudioEngine : IDisposable
                 _far[i] = _refDelayed.Dequeue();
 
             AecWrapper.AEC_ProcessFrame(_near, _far, _outClean, FrameSamples);
+
+            // 运行态标定：累计输出/参考能量（均方），并记录每 10ms 帧残差比用于收敛速度评估。
+            double frameOutEnergy = 0d;
+            double frameFarEnergy = 0d;
+            for (var i = 0; i < FrameSamples; i++)
+            {
+                var sOut = _outClean[i];
+                var sFar = _far[i];
+                var outE = sOut * sOut;
+                var farE = sFar * sFar;
+
+                _calibrationEnergySum += outE;
+                _calibrationFarEnergySum += farE;
+                frameOutEnergy += outE;
+                frameFarEnergy += farE;
+            }
+            _calibrationSampleCount += FrameSamples;
+
+            var frameOutRms = Math.Sqrt(frameOutEnergy / FrameSamples);
+            var frameFarRms = Math.Sqrt(frameFarEnergy / FrameSamples);
+            var frameRatio = frameOutRms / Math.Max(1e-8, frameFarRms);
+            _calibrationFrameRatios.Add(frameRatio);
 
             var nPeak = PeakTo100(_near, FrameSamples);
             var fPeak = PeakTo100(_far, FrameSamples);
