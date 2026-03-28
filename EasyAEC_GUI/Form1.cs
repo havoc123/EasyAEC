@@ -95,7 +95,7 @@ public partial class Form1 : Form
         grpDeviceRouting.Controls.Add(_pnlSignalHint);
         grpDeviceRouting.Controls.SetChildIndex(_pnlSignalHint, 0);
 
-        Text = "EasyAEC v1.3.0 — 零延迟声学回声消除";
+        Text = "EasyAEC v1.3.1 — 零延迟声学回声消除";
 
         _trayMenu = new ContextMenuStrip();
         _trayMenu.Items.Add("打开 EasyAEC", null, (_, _) => RestoreFromTray());

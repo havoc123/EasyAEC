@@ -39,6 +39,9 @@ public sealed class AudioEngine : IDisposable
     private bool _disposed;
     private DateTime _lastLevelsUtc = DateTime.MinValue;
 
+    private int _micRestartInProgress;
+    private int _loopRestartInProgress;
+
     private double _calibrationEnergySum;
     private double _calibrationFarEnergySum;
     private int _calibrationSampleCount;
@@ -236,8 +239,90 @@ public sealed class AudioEngine : IDisposable
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
-        if (e.Exception != null)
-            LogWriter.LogError("AudioEngine", $"采集停止异常：{e.Exception.Message}");
+        if (e.Exception == null)
+            return;
+
+        LogWriter.LogError("AudioEngine", $"采集停止异常：{e.Exception.Message}");
+
+        // 设备会话中断（常见于长时间运行、设备切换/睡眠唤醒）时尝试自恢复。
+        if (!_running)
+            return;
+
+        if (sender == _micCapture)
+            _ = TryRestartCaptureAsync(isMic: true);
+        else if (sender == _loopCapture)
+            _ = TryRestartCaptureAsync(isMic: false);
+    }
+
+    private async Task TryRestartCaptureAsync(bool isMic)
+    {
+        var flag = isMic ? ref _micRestartInProgress : ref _loopRestartInProgress;
+        if (Interlocked.Exchange(ref flag, 1) == 1)
+            return;
+
+        try
+        {
+            await Task.Delay(300).ConfigureAwait(false);
+
+            lock (_sync)
+            {
+                if (!_running)
+                    return;
+
+                if (isMic)
+                {
+                    try
+                    {
+                        _micCapture?.StopRecording();
+                    }
+                    catch
+                    {
+                    }
+
+                    _micCapture?.Dispose();
+                    if (_captureDevice is null)
+                        return;
+
+                    _micCapture = new WasapiCapture(_captureDevice);
+                    _micFormat = _micCapture.WaveFormat;
+                    _micCapture.DataAvailable += OnMicDataAvailable;
+                    _micCapture.RecordingStopped += OnRecordingStopped;
+                    _micCapture.StartRecording();
+
+                    LogWriter.LogInfo("AudioEngine", "监听输入采集已自动恢复。");
+                }
+                else
+                {
+                    try
+                    {
+                        _loopCapture?.StopRecording();
+                    }
+                    catch
+                    {
+                    }
+
+                    _loopCapture?.Dispose();
+                    if (_loopDevice is null)
+                        return;
+
+                    _loopCapture = new WasapiLoopbackCapture(_loopDevice);
+                    _loopFormat = _loopCapture.WaveFormat;
+                    _loopCapture.DataAvailable += OnLoopDataAvailable;
+                    _loopCapture.RecordingStopped += OnRecordingStopped;
+                    _loopCapture.StartRecording();
+
+                    LogWriter.LogInfo("AudioEngine", "监听输出回采已自动恢复。");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogWriter.LogWarning("AudioEngine", $"自动恢复采集失败：{ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref flag, 0);
+        }
     }
 
     private void OnMicDataAvailable(object? sender, WaveInEventArgs e)
