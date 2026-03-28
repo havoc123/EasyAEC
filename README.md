@@ -57,6 +57,15 @@ dotnet run --project EasyAEC_GUI/EasyAEC_GUI.csproj -c Debug
 - 托盘双击：恢复主窗口
 - 托盘菜单“退出”：真正退出程序
 
+## Third-Party 组件与致谢
+
+本项目使用了第三方 AEC 实现：
+
+- `ewan-xu/AEC3`
+  - Repository: https://github.com/ewan-xu/AEC3
+  - 用途：作为 AEC 核心能力来源（在本项目中被集成与调用）
+  - License：请以该仓库实际 LICENSE 为准
+
 ## 说明
 
 - 自动标定是“运行态策略”，目标是找到当前链路下可用的延迟补偿值。

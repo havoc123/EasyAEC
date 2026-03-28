@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -16,8 +17,13 @@ public partial class Form1 : Form
 
     private readonly NotifyIcon _trayIcon;
     private readonly ContextMenuStrip _trayMenu;
+    private readonly ToolTip _toolTip;
+    private readonly Panel _pnlSignalHint;
+    private readonly Label _lblSignalHint;
+    private readonly Button _btnCloseSignalHint;
     private bool _allowExitFromTray;
     private bool _trayHintShown;
+    private bool _signalHintDismissed;
 
     private sealed class WasapiDeviceItem
     {
@@ -35,6 +41,8 @@ public partial class Form1 : Form
         public int SuppressionStrengthIndex { get; set; } = 1;
         public int DelayCompensationMs { get; set; } = 0;
         public bool DebugMode { get; set; }
+        public bool SignalHintDismissed { get; set; }
+        public bool TrayHintShown { get; set; }
     }
 
     public Form1()
@@ -42,13 +50,62 @@ public partial class Form1 : Form
         InitializeComponent();
         LogWriter.Attach(this, chkDebugMode, txtDebugLog);
 
+        _toolTip = new ToolTip();
+        _toolTip.SetToolTip(btnAutoCalibrate, "运行态自动测算延迟补偿");
+
+        btnAutoCalibrate.Text = "自动标定";
+
+        _pnlSignalHint = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 58,
+            BackColor = Color.FromArgb(255, 248, 204),
+            Padding = new Padding(8, 6, 8, 6)
+        };
+
+        _btnCloseSignalHint = new Button
+        {
+            Text = "X",
+            Dock = DockStyle.Right,
+            Width = 34,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(255, 240, 170),
+            ForeColor = Color.FromArgb(122, 86, 0),
+            Margin = new Padding(0)
+        };
+        _btnCloseSignalHint.FlatAppearance.BorderSize = 0;
+        _btnCloseSignalHint.Click += (_, _) =>
+        {
+            _signalHintDismissed = true;
+            _pnlSignalHint.Visible = false;
+        };
+
+        _lblSignalHint = new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(122, 86, 0),
+            Padding = new Padding(8, 2, 8, 2),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Text = "监听输入/监听输出请使用原始设备信号，必须关闭所有音频增强与效果插件（AGC、降噪、EQ、压缩、门限、EAPO/VST），否则软件基础AEC功能将不可靠。"
+        };
+
+        _pnlSignalHint.Controls.Add(_lblSignalHint);
+        _pnlSignalHint.Controls.Add(_btnCloseSignalHint);
+        grpDeviceRouting.Controls.Add(_pnlSignalHint);
+        grpDeviceRouting.Controls.SetChildIndex(_pnlSignalHint, 0);
+
+        Text = "EasyAEC v1.3.0 — 零延迟声学回声消除";
+
         _trayMenu = new ContextMenuStrip();
         _trayMenu.Items.Add("打开 EasyAEC", null, (_, _) => RestoreFromTray());
         _trayMenu.Items.Add("退出", null, (_, _) => ExitFromTray());
 
+        var appIcon = TryLoadAppIcon() ?? Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
+
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = appIcon,
             Text = "EasyAEC",
             Visible = false,
             ContextMenuStrip = _trayMenu
@@ -130,7 +187,16 @@ public partial class Form1 : Form
         Show();
         ShowInTaskbar = true;
         WindowState = FormWindowState.Normal;
+
+        // 托盘恢复时短暂置顶，确保窗口回到最前。
+        TopMost = true;
         Activate();
+        BeginInvoke(() => TopMost = false);
+
+        // 聚焦当前可用输入控件（本界面无 TabPage，优先聚焦延迟输入框）。
+        if (txtDelayCompensationMs.CanFocus)
+            txtDelayCompensationMs.Focus();
+
         _trayIcon.Visible = false;
     }
 
@@ -775,6 +841,9 @@ public partial class Form1 : Form
             cboSuppressionStrength.SelectedIndex = Math.Clamp(config.SuppressionStrengthIndex, 0, Math.Max(0, cboSuppressionStrength.Items.Count - 1));
             txtDelayCompensationMs.Text = config.DelayCompensationMs.ToString(CultureInfo.InvariantCulture);
             chkDebugMode.Checked = config.DebugMode;
+            _signalHintDismissed = config.SignalHintDismissed;
+            _trayHintShown = config.TrayHintShown;
+            _pnlSignalHint.Visible = !_signalHintDismissed;
 
             LogWriter.LogInfo("Config", $"已加载配置：{_configPath}");
         }
@@ -798,7 +867,9 @@ public partial class Form1 : Form
                 AudioOutputDeviceId = GetSelectedDeviceId(cboAudioOutput),
                 SuppressionStrengthIndex = Math.Clamp(cboSuppressionStrength.SelectedIndex, 0, 2),
                 DelayCompensationMs = delayMs,
-                DebugMode = chkDebugMode.Checked
+                DebugMode = chkDebugMode.Checked,
+                SignalHintDismissed = _signalHintDismissed,
+                TrayHintShown = _trayHintShown
             };
 
             var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
@@ -822,6 +893,47 @@ public partial class Form1 : Form
                 box.SelectedIndex = i;
                 return;
             }
+        }
+    }
+
+    private Icon? TryLoadAppIcon()
+    {
+        try
+        {
+            // 1) 优先使用标准 ICO（任务栏/托盘兼容性最好）。
+            var icoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "EasyAEC.ico");
+            if (File.Exists(icoPath))
+            {
+                var icon = new Icon(icoPath);
+                Icon = icon;
+                return icon;
+            }
+
+            // 2) 回退到 PNG 动态生成图标（兜底）。
+            var pngPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icon_plain.png");
+            if (File.Exists(pngPath))
+            {
+                using var bmp = new Bitmap(pngPath);
+                var hIcon = bmp.GetHicon();
+                var icon = Icon.FromHandle(hIcon);
+                var cloned = (Icon)icon.Clone();
+                Icon = cloned;
+                return cloned;
+            }
+
+            // 3) 最后回退到 exe 关联图标
+            var embedded = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (embedded is not null)
+            {
+                Icon = embedded;
+                return embedded;
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
         }
     }
 
